@@ -1,0 +1,8 @@
+#!/usr/bin/env osascript
+
+on run argv
+    set themeName to item 1 of argv
+    tell application id "com.runningwithcrayons.Alfred"
+        set theme themeName
+    end tell
+end run

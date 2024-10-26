@@ -1,0 +1,76 @@
+#!/usr/bin/env osascript
+
+on readJSONFile(filePath, fieldName)
+    try
+        set posixPath to POSIX path of filePath
+        set cmd to "cat " & quoted form of posixPath & " | grep '\"" & fieldName & "\" :' | sed 's/.*\"" & fieldName & "\" : \"\\(..*\\)\".*/\\1/'"
+        set fieldValue to do shell script cmd
+        return fieldValue
+    on error errMsg
+        log "Error reading JSON file: " & errMsg
+        return missing value
+    end try
+end readJSONFile
+
+-- Get user themes folder path
+set userThemesFolder to (path to library folder from user domain as text) & "Application Support:Alfred:Alfred.alfredpreferences:themes:"
+
+-- Define built-in themes
+set builtinThemes to {"Alfred", "Alfred Dark", "Alfred Modern", "Alfred Modern Dark", "Alfred Classic", "Alfred macOS", "Alfred macOS Dark", "Frosty Teal", "Large Avenir", "High Contrast Light"}
+
+-- Get list of theme folders and their names
+set themeNames to {}
+set themeSubtitles to {}
+
+-- Add built-in themes first
+repeat with themeName in builtinThemes
+    copy themeName to end of themeNames
+    copy "Alfred Default Theme" to end of themeSubtitles
+end repeat
+
+-- Get user-installed themes
+tell application "System Events"
+    set userThemeFolders to get name of every folder of folder userThemesFolder
+end tell
+
+repeat with folderName in userThemeFolders
+    set themeJSONPath to userThemesFolder & folderName & ":theme.json"
+    try
+        set themeName to readJSONFile(themeJSONPath, "name")
+        set themeCredit to readJSONFile(themeJSONPath, "credit")
+        if themeName is not missing value then
+            copy themeName to end of themeNames
+            if themeCredit is not missing value then
+                copy "by " & themeCredit to end of themeSubtitles
+            else
+                copy "Custom Theme" to end of themeSubtitles
+            end if
+        end if
+    on error errMsg
+        log "Error processing theme folder " & folderName & ": " & errMsg
+    end try
+end repeat
+
+-- Create the Alfred JSON structure
+set jsonItems to "{"
+set jsonItems to jsonItems & "\"items\": ["
+
+set itemCount to count of themeNames
+repeat with i from 1 to itemCount
+    set themeName to item i of themeNames
+    set themeSubtitle to item i of themeSubtitles
+    set jsonItems to jsonItems & "{"
+    set jsonItems to jsonItems & "\"type\": \"default\","
+    set jsonItems to jsonItems & "\"title\": \"" & themeName & "\","
+    set jsonItems to jsonItems & "\"subtitle\": \"" & themeSubtitle & "\","
+    set jsonItems to jsonItems & "\"arg\": \"" & themeName & "\","
+    set jsonItems to jsonItems & "\"autocomplete\": \"" & themeName & "\""
+    set jsonItems to jsonItems & "}"
+    if i is less than itemCount then
+        set jsonItems to jsonItems & ","
+    end if
+end repeat
+
+set jsonItems to jsonItems & "]}"
+
+return jsonItems
