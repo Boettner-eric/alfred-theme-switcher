@@ -2,8 +2,7 @@
 
 on readJSONFile(filePath, fieldName)
     try
-        set posixPath to POSIX path of filePath
-        set cmd to "cat " & quoted form of posixPath & " | grep '\"" & fieldName & "\" :' | sed 's/.*\"" & fieldName & "\" : \"\\(..*\\)\".*/\\1/'"
+        set cmd to "cat " & quoted form of filePath & " | grep '\"" & fieldName & "\" :' | sed 's/.*\"" & fieldName & "\" : \"\\(..*\\)\".*/\\1/'"
         set fieldValue to do shell script cmd
         return fieldValue
     on error errMsg
@@ -11,9 +10,6 @@ on readJSONFile(filePath, fieldName)
         return missing value
     end try
 end readJSONFile
-
--- Get user themes folder path
-set userThemesFolder to (path to library folder from user domain as text) & "Application Support:Alfred:Alfred.alfredpreferences:themes:"
 
 -- Define built-in themes
 set builtinThemes to {"Alfred", "Alfred Dark", "Alfred Modern", "Alfred Modern Dark", "Alfred Classic", "Alfred macOS", "Alfred macOS Dark", "Frosty Teal", "Large Avenir", "High Contrast Light"}
@@ -28,28 +24,35 @@ repeat with themeName in builtinThemes
     copy "Alfred Default Theme" to end of themeSubtitles
 end repeat
 
--- Get user-installed themes
-tell application "System Events"
-    set userThemeFolders to get name of every folder of folder userThemesFolder
-end tell
+try
+    -- Get Alfred preferences path from environment variable
+    set alfredPrefsPath to (system attribute "alfred_preferences") & "/themes"
 
-repeat with folderName in userThemeFolders
-    set themeJSONPath to userThemesFolder & folderName & ":theme.json"
-    try
-        set themeName to readJSONFile(themeJSONPath, "name")
-        set themeCredit to readJSONFile(themeJSONPath, "credit")
-        if themeName is not missing value then
-            copy themeName to end of themeNames
-            if themeCredit is not missing value then
-                copy "by " & themeCredit to end of themeSubtitles
-            else
-                copy "Custom Theme" to end of themeSubtitles
+    set userThemeFolders to paragraphs of (do shell script "ls " & quoted form of alfredPrefsPath)
+
+    repeat with folderName in userThemeFolders
+        try
+            set themeJSONPath to alfredPrefsPath & "/" & folderName & "/theme.json"
+
+            set themeName to readJSONFile(themeJSONPath, "name")
+            set themeCredit to readJSONFile(themeJSONPath, "credit")
+
+            if themeName is not missing value then
+                copy themeName to end of themeNames
+                if themeCredit is not missing value then
+                    copy "by " & themeCredit to end of themeSubtitles
+                else
+                    copy "Custom Theme" to end of themeSubtitles
+                end if
             end if
-        end if
-    on error errMsg
-        log "Error processing theme folder " & folderName & ": " & errMsg
-    end try
-end repeat
+        on error errMsg
+            log "Error processing theme folder " & folderName & ": " & errMsg
+        end try
+    end repeat
+on error errMsg
+    -- If there's any error accessing user themes, just continue with built-in themes
+    log "Error accessing user themes folder: " & errMsg
+end try
 
 -- Create the Alfred JSON structure
 set jsonItems to "{"
