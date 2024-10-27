@@ -2,8 +2,13 @@
 
 on readJSONFile(filePath, fieldName)
     try
-        set cmd to "cat " & quoted form of filePath & " | grep '\"" & fieldName & "\" :' | sed 's/.*\"" & fieldName & "\" : \"\\(..*\\)\".*/\\1/'"
+        set cmd to "cat " & quoted form of filePath & " | grep '\"" & fieldName & "\"' | sed 's/.*\"" & fieldName & "\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/'"
         set fieldValue to do shell script cmd
+
+        if fieldValue is equal to "" then
+            return missing value
+        end if
+
         return fieldValue
     on error errMsg
         log "Error reading JSON file: " & errMsg
