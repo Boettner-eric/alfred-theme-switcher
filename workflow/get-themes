@@ -1,84 +1,89 @@
-#!/usr/bin/env osascript
+#!/usr/bin/env osascript -l JavaScript
 
-on readJSONFile(filePath, fieldName)
-    try
-        set cmd to "cat " & quoted form of filePath & " | grep '\"" & fieldName & "\"' | sed 's/.*\"" & fieldName & "\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/'"
-        set fieldValue to do shell script cmd
+ObjC.import('stdlib');
 
-        if fieldValue is equal to "" then
-            return missing value
-        end if
+function readThemeJSON(filePath) {
+    try {
+        const fileContent = $.NSString.stringWithContentsOfFileEncodingError(filePath, $.NSUTF8StringEncoding, null);
+        const jsonString = ObjC.unwrap(fileContent);
+        if (!jsonString) {
+            return null;
+        }
 
-        return fieldValue
-    on error errMsg
-        log "Error reading JSON file: " & errMsg
-        return missing value
-    end try
-end readJSONFile
+        const jsonData = JSON.parse(jsonString);
+        return jsonData.alfredtheme || null;
+    } catch (error) {
+        console.log(`Error reading JSON file: ${error}`);
+        return null;
+    }
+}
 
--- Define built-in themes
-set builtinThemes to {"Alfred", "Alfred Dark", "Alfred Modern", "Alfred Modern Dark", "Alfred Classic", "Alfred macOS", "Alfred macOS Dark", "Frosty Teal", "Large Avenir", "High Contrast Light"}
+function run(argv) {
+    const builtinThemes = [
+        "Alfred",
+        "Alfred Dark",
+        "Alfred Modern",
+        "Alfred Modern Dark",
+        "Alfred Classic",
+        "Alfred macOS",
+        "Alfred macOS Dark",
+        "Frosty Teal",
+        "Large Avenir",
+        "High Contrast Light"
+    ];
 
--- Get list of theme folders and their names
-set themeNames to {}
-set themeSubtitles to {}
+    const themeNames = [];
+    const themeSubtitles = [];
 
--- Add built-in themes first
-repeat with themeName in builtinThemes
-    copy themeName to end of themeNames
-    copy "Alfred Default Theme" to end of themeSubtitles
-end repeat
+    builtinThemes.forEach(themeName => {
+        themeNames.push(themeName);
+        themeSubtitles.push("Alfred Default Theme");
+    });
 
-try
-    -- Get Alfred preferences path from environment variable
-    set alfredPrefsPath to (system attribute "alfred_preferences") & "/themes"
+    try {
+        const app = Application.currentApplication();
+        app.includeStandardAdditions = true;
 
-    set userThemeFolders to paragraphs of (do shell script "ls " & quoted form of alfredPrefsPath)
+        const alfredPrefsPath = $.getenv('alfred_preferences') + "/themes";
+        const userThemeFolders = app.doShellScript(`ls "${alfredPrefsPath}"`).split('\r');
 
-    repeat with folderName in userThemeFolders
-        try
-            set themeJSONPath to alfredPrefsPath & "/" & folderName & "/theme.json"
+        const userThemes = [];
 
-            set themeName to readJSONFile(themeJSONPath, "name")
-            set themeCredit to readJSONFile(themeJSONPath, "credit")
+        userThemeFolders.forEach(folderName => {
+            try {
+                const themeJSONPath = `${alfredPrefsPath}/${folderName}/theme.json`;
+                const themeData = readThemeJSON(themeJSONPath);
 
-            if themeName is not missing value then
-                copy themeName to end of themeNames
-                if themeCredit is not missing value then
-                    copy "by " & themeCredit to end of themeSubtitles
-                else
-                    copy "Custom Theme" to end of themeSubtitles
-                end if
-            end if
-        on error errMsg
-            log "Error processing theme folder " & folderName & ": " & errMsg
-        end try
-    end repeat
-on error errMsg
-    -- If there's any error accessing user themes, just continue with built-in themes
-    log "Error accessing user themes folder: " & errMsg
-end try
+                if (themeData && themeData.name) {
+                    userThemes.push({
+                        name: themeData.name,
+                        subtitle: themeData.credit ? `by ${themeData.credit}` : "Custom Theme"
+                    });
+                }
+            } catch (error) {
+                console.log(`Error processing theme folder ${folderName}: ${error}`);
+            }
+        });
 
--- Create the Alfred JSON structure
-set jsonItems to "{"
-set jsonItems to jsonItems & "\"items\": ["
+        // Sort alphabetically to match Alfred's theme list
+        userThemes.sort((a, b) => a.name.localeCompare(b.name));
+        userThemes.forEach(theme => {
+            themeNames.push(theme.name);
+            themeSubtitles.push(theme.subtitle);
+        });
 
-set itemCount to count of themeNames
-repeat with i from 1 to itemCount
-    set themeName to item i of themeNames
-    set themeSubtitle to item i of themeSubtitles
-    set jsonItems to jsonItems & "{"
-    set jsonItems to jsonItems & "\"type\": \"default\","
-    set jsonItems to jsonItems & "\"title\": \"" & themeName & "\","
-    set jsonItems to jsonItems & "\"subtitle\": \"" & themeSubtitle & "\","
-    set jsonItems to jsonItems & "\"arg\": \"" & themeName & "\","
-    set jsonItems to jsonItems & "\"autocomplete\": \"" & themeName & "\""
-    set jsonItems to jsonItems & "}"
-    if i is less than itemCount then
-        set jsonItems to jsonItems & ","
-    end if
-end repeat
+    } catch (error) {
+        // If there's any error accessing user themes, just continue with built-in themes
+        console.log(`Error accessing user themes folder: ${error}`);
+    }
 
-set jsonItems to jsonItems & "]}"
+    const items = themeNames.map((themeName, index) => ({
+        type: "default",
+        title: themeName,
+        subtitle: themeSubtitles[index],
+        arg: themeName,
+        autocomplete: themeName
+    }));
 
-return jsonItems
+    return JSON.stringify({ items });
+}
