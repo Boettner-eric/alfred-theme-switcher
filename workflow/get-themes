@@ -18,6 +18,11 @@ function readThemeJSON(filePath) {
     }
 }
 
+function fileExists(filePath) {
+    const fileManager = $.NSFileManager.defaultManager;
+    return fileManager.fileExistsAtPath(filePath);
+}
+
 function run(argv) {
     const builtinThemes = [
         "Alfred",
@@ -77,13 +82,22 @@ function run(argv) {
         console.log(`Error accessing user themes folder: ${error}`);
     }
 
-    const items = themeNames.map((themeName, index) => ({
-        type: "default",
-        title: themeName,
-        subtitle: themeSubtitles[index],
-        arg: themeName,
-        autocomplete: themeName
-    }));
+    const items = themeNames.map((themeName, index) => {
+        const iconPath = "./icons/" + themeName + ".png";
+        const item = {
+            type: "default",
+            title: themeName,
+            subtitle: themeSubtitles[index],
+            arg: themeName,
+            autocomplete: themeName
+        };
+        
+        if (fileExists(iconPath)) {
+            item.icon = { path: iconPath };
+        }
+        
+        return item;
+    });
 
     return JSON.stringify({ items });
 }
